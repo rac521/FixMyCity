@@ -33,18 +33,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Database initialization
-const dbPath = path.join(__dirname, 'civicpulse_v2.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error opening database', err.message);
-    } else {
-        console.log('Connected to the SQLite database.');
-        initDb();
-    }
-});
-
-function initDb() {
+// --- Database Setup ---
+const dbSource = path.join(__dirname, 'fixmycity_v1.sqlite');
+const db = new sqlite3.Database(dbSource, (err) => {
+  if (err) {
+    console.error("Database opening error: ", err.message);
+  } else {
+    console.log("Connected to the SQLite database.");
+    
+    // Create tables
     db.serialize(() => {
         // Users Table
         db.run(`CREATE TABLE IF NOT EXISTS Users (
@@ -109,15 +106,10 @@ function initDb() {
             FOREIGN KEY (complaint_id) REFERENCES Complaints(id)
         )`);
 
-        // Insert seed data for demo purposes (if empty)
-        db.get("SELECT count(*) as count FROM Users", (err, row) => {
-            if (row && row.count === 0) {
-                db.run("INSERT INTO Users (name, email, role) VALUES ('Demo Citizen', 'citizen@demo.com', 'citizen')");
-                db.run("INSERT INTO Users (name, email, role) VALUES ('Demo Officer', 'officer@demo.com', 'officer')");
-            }
-        });
+        // Removed MVP auto-seed since we use seed.js with bcrypt hashes now
     });
-}
+  }
+});
 
 // ================= MIDDLEWARE =================
 const authenticateToken = (req, res, next) => {

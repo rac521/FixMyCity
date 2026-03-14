@@ -105,15 +105,16 @@ export default function ReportIssuePage() {
   }
 
   return (
-    <div className="container animate-fade-in" style={{ paddingBottom: '3rem' }}>
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+    <div className="container main-content animate-fade-in delay-200">
+      <div className="glass-panel animate-slide-right delay-300" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+          Report an Issue
+        </h2>
         {(!user && localStorage.getItem('token') === null) && (
           <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', color: 'var(--primary)', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', textAlign: 'center' }}>
             <p><strong>Note:</strong> You are reporting as a guest. <a href="/login" style={{ color: 'var(--secondary)', textDecoration: 'underline' }}>Login</a> to track your personal reports easily.</p>
           </div>
         )}
-
-        <h1 style={{ marginBottom: '2rem' }} className="title-gradient">Report an Issue</h1>
         
         <form className="glass-panel" onSubmit={handleSubmit}>
           

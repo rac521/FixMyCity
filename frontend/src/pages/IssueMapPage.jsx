@@ -33,8 +33,8 @@ export default function IssueMapPage() {
   };
 
   return (
-    <div className="container animate-fade-in" style={{ paddingBottom: '3rem', height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="container animate-fade-in delay-200" style={{ paddingBottom: '3rem', height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
+      <div className="animate-slide-right delay-300" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 className="title-gradient">Live Issue Map</h1>
         <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--primary)' }}></div> Reported</span>
@@ -43,7 +43,7 @@ export default function IssueMapPage() {
         </div>
       </div>
 
-      <div className="glass-panel" style={{ flex: 1, padding: 0, overflow: 'hidden', borderRadius: '16px', position: 'relative', zIndex: 1 }}>
+      <div className="glass-panel animate-fade-in delay-400" style={{ flex: 1, padding: 0, overflow: 'hidden', borderRadius: '16px', position: 'relative', zIndex: 1 }}>
         <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%', background: '#1e293b' }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

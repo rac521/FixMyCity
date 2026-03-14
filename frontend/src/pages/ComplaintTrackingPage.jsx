@@ -55,18 +55,30 @@ export default function ComplaintTrackingPage() {
     }
   };
 
+  // Assuming sortedComplaints is meant to be complaints for now, or will be defined elsewhere by the user.
+  // To make the code syntactically correct as per instructions, we'll use 'complaints' for now.
+  const sortedComplaints = complaints;
+
   return (
-    <div className="container animate-fade-in" style={{ paddingBottom: '3rem' }}>
-      <h1 className="title-gradient" style={{ marginBottom: '2rem' }}>Community Issues Tracker</h1>
+    <div className="container main-content animate-fade-in delay-200">
+      <div className="animate-slide-right delay-300" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', marginBottom: '2rem' }}>
+        <div>
+          <h1 className="title-gradient" style={{ marginBottom: '0.5rem' }}>Community Tracking</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Follow and upvote ongoing infrastructure resolutions.</p>
+        </div>
+      </div>
       
       {loading ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading records...</div>
-      ) : complaints.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center' }}>No complaints found in the local area.</div>
       ) : (
-        <div className="grid grid-cols-2">
-          {complaints.map(c => (
-            <div key={c.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="grid grid-cols-3">
+          {sortedComplaints.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px' }}>
+              <p style={{ color: 'var(--text-muted)' }}>No issues reported yet.</p>
+            </div>
+          ) : (
+            sortedComplaints.map((c, idx) => (
+              <div key={c.id} className="glass-panel animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animationDelay: `${200 + (idx * 100)}ms` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h3 style={{ marginBottom: '0.25rem' }}>{c.category}</h3>
@@ -112,7 +124,8 @@ export default function ComplaintTrackingPage() {
                 </button>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
     </div>

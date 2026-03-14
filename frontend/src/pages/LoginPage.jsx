@@ -42,7 +42,7 @@ export default function LoginPage() {
       <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '400px' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <Shield size={48} color="var(--primary)" style={{ margin: '0 auto 1rem' }} />
-          <h2 className="title-gradient">{isLogin ? 'Welcome Back' : 'Join CivicPulse'}</h2>
+          <h2 className="title-gradient">{isLogin ? 'Welcome Back' : 'Join FixMyCity'}</h2>
           <p style={{ color: 'var(--text-muted)' }}>{isLogin ? 'Log in to continue' : 'Sign up to report issues'}</p>
         </div>
 

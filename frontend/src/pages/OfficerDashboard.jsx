@@ -68,13 +68,11 @@ export default function OfficerDashboard() {
   const filteredComplaints = filter === 'All' ? complaints : complaints.filter(c => c.status === filter);
 
   return (
-    <div className="container animate-fade-in" style={{ paddingBottom: '3rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem' }}>
+    <div className="container main-content animate-fade-in delay-200" style={{ paddingBottom: '3rem' }}>
+      <div className="animate-slide-right delay-300" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 className="title-gradient" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <ShieldCheck size={32} color="var(--primary)" /> Officer Dashboard
-          </h1>
-          <p style={{ color: 'var(--text-muted)' }}>Manage and update municipal incident reports</p>
+          <h1 className="title-gradient" style={{ marginBottom: '0.5rem' }}>Officer Dispatch Dashboard</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Prioritize, assign, and resolve municipal incidents securely.</p>
         </div>
         
         <div style={{ display: 'flex', gap: '1rem' }}>
@@ -98,10 +96,10 @@ export default function OfficerDashboard() {
         </div>
       </div>
 
-      <div className="glass-panel" style={{ padding: 0, overflowX: 'auto' }}>
-        {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading records...</div>
-        ) : (
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-muted)' }}>Loading records...</div>
+      ) : (
+        <div className="glass-panel animate-fade-in delay-400" style={{ padding: 0, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--card-border)' }}>
@@ -188,8 +186,8 @@ export default function OfficerDashboard() {
               )}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

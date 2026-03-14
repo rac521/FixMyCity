@@ -35,8 +35,8 @@ function Navbar() {
     <nav className="navbar">
       <div className="container nav-container">
         <Link to="/" className="nav-logo">
-          <Activity color="#8b5cf6" />
-          <span className="title-gradient">CivicPulse</span>
+          <ShieldAlert size={28} color="var(--primary)" />
+          FixMyCity
         </Link>
 
         {/* Desktop Nav */}
@@ -45,14 +45,7 @@ function Navbar() {
             <Link 
               key={item.path} 
               to={item.path}
-              style={{
-                color: isActive(item.path) ? 'white' : 'var(--text-muted)',
-                fontWeight: isActive(item.path) ? '600' : '400',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                transition: 'color 0.2s'
-              }}
+              className={`nav-link-item ${isActive(item.path) ? 'active' : ''}`}
             >
               {item.name}
             </Link>

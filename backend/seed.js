@@ -1,7 +1,12 @@
 const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, 'civicpulse_v2.sqlite');
+const dbPath = path.join(__dirname, 'fixmycity_v1.sqlite');
+
+// Database must be initialized by server.js first
+// so the tables actually exist when we seed data.
+
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error opening database', err.message);
