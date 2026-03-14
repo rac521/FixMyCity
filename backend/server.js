@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -106,6 +107,18 @@ const db = new sqlite3.Database(dbSource, (err) => {
             FOREIGN KEY (complaint_id) REFERENCES Complaints(id)
         )`);
 
+        // Notifications Table
+        db.run(`CREATE TABLE IF NOT EXISTS Notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            complaint_id INTEGER,
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES Users(id),
+            FOREIGN KEY (complaint_id) REFERENCES Complaints(id)
+        )`);
+
         // Removed MVP auto-seed since we use seed.js with bcrypt hashes now
     });
   }
@@ -134,15 +147,19 @@ const authenticateToken = (req, res, next) => {
 
 // Auth Routes
 app.post('/api/auth/register', async (req, res) => {
-    const { name, email, password, role } = req.body;
+    console.log("REGISTER HIT WITH BODY:", req.body);
+    let { name, email, password, role } = req.body;
+    email = (email || '').toLowerCase().trim();
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.run("INSERT INTO Users (name, email, password_hash, role) VALUES (?, ?, ?, ?)", 
             [name, email, hashedPassword, role || 'citizen'], function(err) {
             if (err) {
+                console.error("DB INSERT ERROR:", err.message);
                 if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Email already exists' });
                 return res.status(500).json({ error: err.message });
             }
+            console.log("DB INSERT SUCCESS FOR:", email);
             res.status(201).json({ message: 'User registered' });
         });
     } catch (e) {
@@ -151,7 +168,9 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+    email = (email || '').toLowerCase().trim();
+    
     db.get("SELECT * FROM Users WHERE email = ?", [email], async (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!user) return res.status(400).json({ error: 'User not found' });
@@ -171,9 +190,75 @@ app.get('/api/me', authenticateToken, (req, res) => {
     res.json(req.user);
 });
 
+// POST /api/analyze-image - Real Gemini AI Vision endpoint
+app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: 'AIzaSyCTJf7CsdO1lgUXZiB3x_wN-I8VqPH2Y_8' });
+        
+        // Read the image file buffer
+        const imageData = fs.readFileSync(req.file.path);
+        
+        const prompt = `
+        You are a smart city infrastructure analyzer. 
+        Analyze the following image and categorize the infrastructure issue shown.
+        Return ONLY a strict JSON object (no markdown, no backticks, just the raw JSON syntax) with the following structure:
+        {
+          "category": "Must be ONE OF: Public Works, Sanitation, Water Supply, Electricity, Public Safety, Public Infrastructure, Environment",
+          "subcategory": "A specific issue type strictly from the chosen category",
+          "description": "A precise, 1-2 sentence description of the visible damage or issue."
+        }
+        
+        Valid Category->Subcategory mappings (CHOOSE PERFECTLY FROM THIS LIST):
+        - Public Works: Potholes, Damaged Roads, Damaged Sidewalks
+        - Sanitation: Garbage Accumulation, Dead Animals, Clogged Drains, Public Toilet Maintenance
+        - Water Supply: Leaking Fire Hydrant, No Water Supply, Contaminated Water
+        - Electricity: Broken Streetlight, Fallen Power Lines, Frequent Outages
+        - Public Safety: Overgrown Bushes (Visibility Issue), Missing Road Signs, Unsafe Crosswalks
+        - Public Infrastructure: Damaged Park Bench, Broken Playground Equipment, Vandalism/Graffiti
+        - Environment: Illegal Dumping, Noise Pollution, Fallen Trees
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [
+                prompt,
+                {
+                    inlineData: {
+                        data: imageData.toString("base64"),
+                        mimeType: req.file.mimetype
+                    }
+                }
+            ]
+        });
+
+        // Parse the generated text into JSON
+        let text = response.text;
+        // Clean markdown backticks if Gemini includes them
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const jsonResult = JSON.parse(text);
+        
+        // Delete the temporary file if needed, or leave it for the final submission
+        fs.unlinkSync(req.file.path);
+
+        res.json(jsonResult);
+    } catch (err) {
+        console.error("Gemini API Error:", err);
+        // Fallback to mock on error so the app doesn't break
+        res.status(500).json({ 
+            error: "Failed to query AI",
+            category: 'Public Works', 
+            subcategory: 'Potholes', 
+            description: 'Fallback: Deep pothole detected on the asphalt surface.'
+        });
+    }
+});
+
 // POST /api/report - Create a new complaint
-app.post('/api/report', authenticateToken, upload.single('image'), (req, res) => {
-    const { category, subcategory, description, lat, lng } = req.body;
+app.post('/api/report', authenticateToken, upload.single('image'), async (req, res) => {
+    let { category, subcategory, description, lat, lng } = req.body;
     const imageUrl = req.file ? '/uploads/' + req.file.filename : null;
     const userId = req.user.id;
 
@@ -181,14 +266,104 @@ app.post('/api/report', authenticateToken, upload.single('image'), (req, res) =>
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const stmt = db.prepare("INSERT INTO Complaints (user_id, category, subcategory, description, image_url, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    stmt.run([userId, category, subcategory, description, imageUrl, lat, lng], function (err) {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        res.status(201).json({ id: this.lastID, message: 'Complaint created successfully' });
-    });
-    stmt.finalize();
+    lat = parseFloat(lat);
+    lng = parseFloat(lng);
+
+    try {
+        // --- PHASE 5: AI Duplicate Detection ---
+        // 1. Geographic Check: Find unresolved issues of the exact same category within ~500 meters (0.005 degrees)
+        const nearbyQuery = `
+            SELECT id, description, lat, lng FROM Complaints 
+            WHERE category = ? 
+            AND status != 'Resolved'
+            AND ABS(lat - ?) < 0.005
+            AND ABS(lng - ?) < 0.005
+            ORDER BY created_at DESC LIMIT 5
+        `;
+
+        db.all(nearbyQuery, [category, lat, lng], async (err, existingIssues) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            let duplicateTargetId = null;
+
+            // 2. Semantic AI Check
+            if (existingIssues.length > 0) {
+                try {
+                    const ai = new GoogleGenAI({ apiKey: 'AIzaSyCTJf7CsdO1lgUXZiB3x_wN-I8VqPH2Y_8' });
+                    
+                    const prompt = `
+                    You are a strict duplicate detection assistant for a city maintenance system.
+                    A citizen just submitted a new issue: "${description}".
+                    
+                    Here are recent existing issues reported very close to this location:
+                    ${existingIssues.map(issue => `[ID: ${issue.id}] - ${issue.description}`).join("\n")}
+                    
+                    Analyze if the new issue is describing the EXACT SAME real-world problem as one of the existing issues.
+                    Consider that people might describe the same pothole, same broken pipe, or same graffiti differently.
+                    If it is the same, return the ID of the duplicate. If it is entirely unique/new, return 0.
+                    
+                    Respond ONLY with a raw JSON block in this exact format, with no markdown styling:
+                    {
+                        "isDuplicate": true or false,
+                        "duplicateId": integer (or 0)
+                    }
+                    `;
+
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: [prompt]
+                    });
+
+                    let text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const aiResult = JSON.parse(text);
+
+                    if (aiResult.isDuplicate && aiResult.duplicateId) {
+                        duplicateTargetId = aiResult.duplicateId;
+                        console.log(`[AI MERGE] New report flagged as duplicate of ID: ${duplicateTargetId}`);
+                    }
+                } catch (aiError) {
+                    console.error("Gemini Duplicate Detection failed, falling back to unique creation.", aiError);
+                }
+            }
+
+            // 3. Execution Engine
+            if (duplicateTargetId) {
+                // It's a duplicate. Instead of making a new post, ADD AN UPVOTE to the existing one.
+                if (req.file) {
+                    // Discard the redundant image from the filesystem
+                    try { fs.unlinkSync(req.file.path); } catch (e) { }
+                }
+
+                const upvoteStmt = db.prepare("INSERT OR IGNORE INTO Upvotes (user_id, complaint_id) VALUES (?, ?)");
+                upvoteStmt.run([userId, duplicateTargetId], function (upvErr) {
+                    upvoteStmt.finalize();
+                    if (upvErr) return res.status(500).json({ error: upvErr.message });
+                    res.status(200).json({ 
+                        id: duplicateTargetId, 
+                        merged: true,
+                        message: 'Duplicate detected! Your report was merged and has boosted the priority of the original issue.' 
+                    });
+                });
+
+            } else {
+                // It's unique. Insert normally.
+                const stmt = db.prepare("INSERT INTO Complaints (user_id, category, subcategory, description, image_url, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                stmt.run([userId, category, subcategory, description, imageUrl, lat, lng], function (insertErr) {
+                    stmt.finalize();
+                    if (insertErr) return res.status(500).json({ error: insertErr.message });
+                    
+                    const newId = this.lastID;
+                    // Auto-upvote their own issue
+                    const upvoteStmt = db.prepare("INSERT INTO Upvotes (user_id, complaint_id) VALUES (?, ?)");
+                    upvoteStmt.run([userId, newId], () => {
+                        res.status(201).json({ id: newId, merged: false, message: 'Complaint created successfully' });
+                    });
+                });
+            }
+        });
+    } catch (routeErr) {
+        res.status(500).json({ error: routeErr.message });
+    }
 });
 
 // GET /api/issues - Fetch all complaints with upvote counts
@@ -285,12 +460,43 @@ app.patch('/api/status', authenticateToken, upload.single('resolution_image'), (
                 return res.status(404).json({ error: 'Complaint not found' });
             }
 
-            db.run("INSERT INTO StatusUpdates (complaint_id, status, updated_by, notes) VALUES (?, ?, ?, ?)", 
-                [complaint_id, status, userId, notes || `Status updated to ${status}`], function(err) {
+            db.run("INSERT INTO StatusUpdates (complaint_id, status, updated_by, notes) VALUES (?, ?, ?, ?)",
+                [complaint_id, status, userId, notes], function(err) {
                 if (err) return res.status(500).json({ error: err.message });
+                
+                // If the issue was marked Resolved, find the original reporter and trigger a Notification
+                if (status === 'Resolved') {
+                    db.get("SELECT user_id, category, subcategory FROM Complaints WHERE id = ?", [complaint_id], (err, complaint) => {
+                        if (!err && complaint) {
+                            const notifMsg = `Your report regarding '${complaint.subcategory}' has been Resolved by a city officer!`;
+                            db.run("INSERT INTO Notifications (user_id, complaint_id, message) VALUES (?, ?, ?)",
+                                [complaint.user_id, complaint_id, notifMsg]
+                            );
+                        }
+                    });
+                }
+                
                 res.json({ message: 'Status updated successfully' });
             });
         });
+    });
+});
+
+// GET /api/notifications - Fetch unread notifications for a user
+app.get('/api/notifications', authenticateToken, (req, res) => {
+    db.all("SELECT * FROM Notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC", 
+    [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// PATCH /api/notifications/:id/read - Mark notification as read
+app.patch('/api/notifications/:id/read', authenticateToken, (req, res) => {
+    db.run("UPDATE Notifications SET is_read = 1 WHERE id = ? AND user_id = ?", 
+    [req.params.id, req.user.id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
     });
 });
 

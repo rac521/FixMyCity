@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, MapPin, CheckCircle, Loader } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, Loader, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,7 +17,7 @@ export default function ReportIssuePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [submitResult, setSubmitResult] = useState(''); // '', 'CREATED', 'MERGED'
   const [locationStr, setLocationStr] = useState('');
   
   const [formData, setFormData] = useState({
@@ -28,9 +28,17 @@ export default function ReportIssuePage() {
     lng: null
   });
   const [image, setImage] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+
+  const aiUpdateRef = React.useRef(false);
 
   React.useEffect(() => {
-    // Reset subcategory when category changes
+    // Reset subcategory when category changes manually, but skip if AI just filled it
+    if (aiUpdateRef.current) {
+      aiUpdateRef.current = false;
+      return;
+    }
     setFormData(prev => ({ ...prev, subcategory: '' }));
   }, [formData.category]);
 
@@ -52,6 +60,69 @@ export default function ReportIssuePage() {
         setLoading(false);
       });
     }
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImage(file);
+    setAiFilled(false);
+  };
+
+  const handleTriggerAI = async (e) => {
+    e.stopPropagation();
+    if (!image) return;
+    
+    setIsAnalyzing(true);
+    setAiFilled(false);
+    
+    // Trigger AI Vision Mock Analysis
+    const payload = new FormData();
+    payload.append('image', image);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('http://localhost:5000/api/analyze-image', {
+        method: 'POST',
+        headers,
+        body: payload
+      });
+      
+      if (res.ok) {
+        const aiData = await res.json();
+        aiUpdateRef.current = true; // prevent the useEffect from wiping subcategory
+        
+        setFormData(prev => ({
+          ...prev,
+          category: aiData.category,
+          subcategory: aiData.subcategory,
+          description: aiData.description
+        }));
+        setAiFilled(true);
+      } else {
+        const errData = await res.json();
+        console.error("Backend returned error or fallback", errData);
+        alert(`AI Error: ${errData.error || 'Failed to analyze'}. Using fallback.`);
+        if (errData.category) {
+          aiUpdateRef.current = true;
+          setFormData(prev => ({
+            ...prev,
+            category: errData.category,
+            subcategory: errData.subcategory,
+            description: errData.description
+          }));
+          setAiFilled(true);
+        }
+      }
+    } catch (err) {
+      console.error("AI Analysis failed:", err);
+      alert("Network error connecting to AI analysis server.");
+    }
+    
+    setIsAnalyzing(false);
   };
 
   const handleSubmit = async (e) => {
@@ -81,8 +152,16 @@ export default function ReportIssuePage() {
         body: payload
       });
       if (res.ok) {
-        setSuccess(true);
-        setTimeout(() => navigate('/track'), 2000);
+        const resultData = await res.json();
+        
+        if (resultData.merged) {
+          setSubmitResult('MERGED');
+          // Add a slight delay before redirecting to allow user to read the message
+          setTimeout(() => navigate('/track'), 4500);
+        } else {
+          setSubmitResult('CREATED');
+          setTimeout(() => navigate('/track'), 2000);
+        }
       } else {
         alert("Network error.");
       }
@@ -92,13 +171,26 @@ export default function ReportIssuePage() {
     setLoading(false);
   };
 
-  if (success) {
+  if (submitResult !== '') {
     return (
       <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-        <div className="glass-panel animate-fade-in" style={{ textAlign: 'center', maxWidth: '400px', width: '100%' }}>
-          <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
-          <h2>Report Submitted!</h2>
-          <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Thank you for helping the community. Redirecting to tracking page...</p>
+        <div className="glass-panel animate-scale-in" style={{ textAlign: 'center', padding: '4rem 2rem', maxWidth: '500px' }}>
+          {submitResult === 'MERGED' ? (
+            <>
+              <Sparkles size={64} color="var(--primary)" className="animate-pulse-glow" style={{ margin: '0 auto 1.5rem' }} />
+              <h2 className="title-gradient" style={{ marginBottom: '1rem' }}>Duplicate Prevented! ✨</h2>
+              <p style={{ color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                Our AI noticed someone already reported this exact issue at this location! <br/><br/>
+                Instead of creating clutter, we instantly <strong>merged your report</strong> into the original and <strong>boosted its priority</strong> for the city officers.
+              </p>
+            </>
+          ) : (
+            <>
+              <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1.5rem' }} />
+              <h2 className="title-gradient" style={{ marginBottom: '1rem' }}>Report Submitted!</h2>
+              <p style={{ color: 'var(--text-muted)' }}>Thank you for helping keep the community safe. You'll be redirected shortly.</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -107,8 +199,9 @@ export default function ReportIssuePage() {
   return (
     <div className="container main-content animate-fade-in delay-200">
       <div className="glass-panel animate-slide-right delay-300" style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+        <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '1.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
           Report an Issue
+          {aiFilled && <span className="status-badge status-resolved animate-fade-in delay-200" style={{ fontSize: '1rem', marginLeft: '1rem' }}><Sparkles size={16}/> AI Auto-Filled</span>}
         </h2>
         {(!user && localStorage.getItem('token') === null) && (
           <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', color: 'var(--primary)', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', textAlign: 'center' }}>
@@ -182,11 +275,25 @@ export default function ReportIssuePage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Photo Evidence (Optional)</label>
-            <div style={{ border: '2px dashed var(--card-border)', borderRadius: '8px', padding: '2rem', textAlign: 'center', cursor: 'pointer' }}
+            <label className="form-label">Photo Evidence</label>
+            <div style={{ border: `2px dashed ${isAnalyzing ? 'var(--primary)' : 'var(--card-border)'}`, borderRadius: '8px', padding: '2rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.3s ease', background: isAnalyzing ? 'rgba(192, 132, 252, 0.05)' : 'transparent' }}
+                 className={isAnalyzing ? 'animate-pulse-glow' : ''}
                  onClick={() => document.getElementById('fileUpload').click()}>
-              {image ? (
-                <span style={{ color: 'var(--success)' }}>Image Selected: {image.name}</span>
+              {isAnalyzing ? (
+                <div style={{ color: 'var(--primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                  <Loader className="animate-float" size={32} />
+                  <p>✨ AI is analyzing image...</p>
+                </div>
+              ) : image ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{ color: 'var(--success)' }}>Image Selected: {image.name}</span>
+                  {!aiFilled && (
+                    <button type="button" className="btn btn-secondary animate-pulse-glow" onClick={handleTriggerAI} style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}>
+                      <Sparkles size={16} /> Analyze with AI magic
+                    </button>
+                  )}
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Click anywhere else to replace image</p>
+                </div>
               ) : (
                 <div style={{ color: 'var(--text-muted)' }}>
                   <Camera size={32} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
@@ -197,8 +304,8 @@ export default function ReportIssuePage() {
                 id="fileUpload" 
                 type="file" 
                 accept="image/*" 
+                onChange={handleImageSelect}
                 style={{ display: 'none' }}
-                onChange={e => setImage(e.target.files[0])}
               />
             </div>
           </div>

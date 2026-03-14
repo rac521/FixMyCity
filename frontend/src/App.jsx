@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { useState } from 'react';
-import { Menu, X, MapPin, Activity, ShieldAlert, PieChart, LogIn, LogOut } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Menu, X, MapPin, Activity, ShieldAlert, PieChart, LogIn, LogOut, Bell, Check } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Pages
@@ -14,8 +14,56 @@ import LoginPage from './pages/LoginPage';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const notifRef = useRef(null);
   const location = useLocation();
   const { user, logout } = useAuth();
+
+  useEffect(() => {
+    if (!user) {
+        setNotifications([]);
+        return;
+    }
+    
+    const fetchNotifs = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('http://localhost:5000/api/notifications', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setNotifications(data);
+            }
+        } catch (e) {}
+    };
+
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 15000); // Polling every 15s
+    return () => clearInterval(interval);
+  }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+        if (notifRef.current && !notifRef.current.contains(event.target)) {
+            setShowNotifs(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const markAsRead = async (id) => {
+    try {
+        const token = localStorage.getItem('token');
+        await fetch(`http://localhost:5000/api/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (e) {}
+  };
 
   const navItems = [
     { name: 'Home', path: '/', icon: <Activity size={18} /> },
@@ -52,9 +100,62 @@ function Navbar() {
           ))}
           
           {user ? (
-            <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-              <LogOut size={18} /> Logout
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+              
+              {/* Notifications Dropdown */}
+              <div ref={notifRef} style={{ position: 'relative' }}>
+                <button 
+                  onClick={() => setShowNotifs(!showNotifs)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center' }}
+                >
+                  <Bell size={20} color={notifications.length > 0 ? "var(--warning)" : "var(--text-main)"} />
+                  {notifications.length > 0 && (
+                    <span style={{
+                      position: 'absolute', top: '-5px', right: '-5px', background: 'var(--danger)', color: 'white',
+                      fontSize: '0.65rem', fontWeight: 'bold', width: '16px', height: '16px', borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {notifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {showNotifs && (
+                  <div className="glass-panel animate-scale-in" style={{
+                    position: 'absolute', top: '40px', right: '-80px', width: '300px', padding: '1rem',
+                    zIndex: 1000, boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden'
+                  }}>
+                    <h4 style={{ marginBottom: '1rem', borderBottom: '1px solid var(--card-border)', paddingBottom: '0.5rem' }}>Notifications</h4>
+                    {notifications.length === 0 ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center' }}>You have no unread notifications.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '300px', overflowY: 'auto' }}>
+                        {notifications.map(n => (
+                          <div key={n.id} style={{
+                            background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '0.75rem',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem'
+                          }}>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', margin: 0, lineHeight: '1.4' }}>{n.message}</p>
+                            <button 
+                              onClick={() => markAsRead(n.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--success)', padding: '2px' }}
+                              title="Mark as read"
+                            >
+                              <Check size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                <LogOut size={18} /> Logout
+              </button>
+            </div>
           ) : (
             <Link to="/login" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
               <LogIn size={18} /> Login
